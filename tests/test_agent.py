@@ -28,3 +28,24 @@ def test_agent_emits_exactly_one_action_per_existing_hand() -> None:
 
 def test_agent_fails_closed_on_bad_observation() -> None:
     assert agent({}) == {"farmer": ["PASS"], "hands": [], "market": []}
+
+
+def test_shared_strategy_rejects_land_quote_without_farm_utilization() -> None:
+    action = agent(observation(money=5000, hour=0))
+    assert ["BUY_LAND"] not in action["market"]
+
+
+def test_shared_strategy_accepts_land_quote_when_farm_is_saturated() -> None:
+    tiles = [[None for _ in range(5)] for _ in range(5)]
+    for index in range(20):
+        x, y = index % 5, index // 5
+        tiles[y][x] = {
+            "kind": "PLANT",
+            "crop": "MELON",
+            "planted_day": 0,
+            "watered_today": True,
+            "consecutive_unwatered": 0,
+            "yield_units": 1,
+        }
+    action = agent(observation(tiles=tiles, money=5000, hour=0))
+    assert ["BUY_LAND"] in action["market"]

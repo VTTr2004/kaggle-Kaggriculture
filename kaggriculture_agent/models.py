@@ -90,11 +90,14 @@ class FarmFeatures:
     weed_count: int
     urgent_count: int
     unlocked_tile_count: int
+    utilization: float
 
 
 @dataclass(frozen=True)
 class CropOpportunity:
     crop: str
+    seed_cost: int
+    days_to_maturity: int
     expected_units: int
     expected_revenue: float
     expected_profit: float
@@ -113,9 +116,12 @@ class MarketIntent:
 @dataclass(frozen=True)
 class EconomyFeatures:
     crop_opportunities: tuple[CropOpportunity, ...]
-    sell_intents: tuple[MarketIntent, ...]
+    market_intents: tuple[MarketIntent, ...]
+    investment_intents: tuple[MarketIntent, ...]
     demand: Mapping[str, int]
     price_ratios: Mapping[str, float]
+    opponent_visible_supply: Mapping[str, int]
+    spendable_cash: float
 
 
 @dataclass(frozen=True)
