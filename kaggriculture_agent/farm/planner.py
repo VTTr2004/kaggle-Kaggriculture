@@ -14,6 +14,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from .pathfinding import distance, next_move
+from ..models import FarmFeatures, FarmTask, GameState, UnitIntent
+
 
 # Deliberately static for the first farm-only search.  This is not connected to
 # the economy forecaster; replace this table manually when the competition
@@ -388,3 +391,49 @@ def optimize_farm_plan(
             best = FarmPlan(seed_targets, planting_days, profit, revenue, tuple(projections))
 
     return best
+
+
+def plan_unit_actions(
+    state: GameState, farm: FarmFeatures, selected_crop: str | None
+) -> tuple[UnitIntent, ...]:
+    """Assign available farm tasks while respecting current inventory."""
+    positions = state.unit_positions
+    inventories = state.inventories
+    assignments: dict[int, FarmTask] = {}
+    used_targets: set[tuple[int, int]] = set()
+
+    for unit_index, position in enumerate(positions):
+        inventory = inventories[unit_index] if unit_index < len(inventories) else {}
+        candidates = [
+            task
+            for task in farm.tasks
+            if task.required_item is None
+            or (hasattr(inventory, "get") and inventory.get(task.required_item, 0) > 0)
+        ]
+        candidates = [task for task in candidates if task.target not in used_targets]
+        if candidates:
+            task = min(candidates, key=lambda value: (-value.priority, distance(position, value.target), value.target))
+            assignments[unit_index] = task
+            used_targets.add(task.target)
+
+    seeds = state.private.get("seeds", {}) or {}
+    available = int(seeds.get(selected_crop, 0) or 0) if selected_crop else 0
+    empty = [position for position in farm.empty_tiles if position not in used_targets]
+    for unit_index, position in enumerate(positions):
+        if unit_index in assignments or available <= 0 or not selected_crop or not empty:
+            continue
+        target = min(empty, key=lambda value: (distance(position, value), value[1], value[0]))
+        empty.remove(target)
+        assignments[unit_index] = FarmTask(target, ("PLANT", selected_crop), 480.0, "plant", f"plant {selected_crop}")
+        available -= 1
+
+    intents = []
+    for unit_index, position in enumerate(positions):
+        task = assignments.get(unit_index)
+        if task is None:
+            intents.append(UnitIntent(unit_index, ("PASS",), None, 0.0, "no feasible farm task"))
+        elif position == task.target:
+            intents.append(UnitIntent(unit_index, task.command, task.target, task.priority, task.reason))
+        else:
+            intents.append(UnitIntent(unit_index, next_move(position, task.target), task.target, task.priority, f"move toward {task.category}"))
+    return tuple(intents)

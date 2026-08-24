@@ -15,6 +15,7 @@ from .planner import (
     hardcoded_price_series,
     optimize_farm_plan,
     project_crop,
+    plan_unit_actions,
 )
 
 __all__ = [
@@ -32,4 +33,5 @@ __all__ = [
     "hardcoded_price_series",
     "optimize_farm_plan",
     "project_crop",
+    "plan_unit_actions",
 ]

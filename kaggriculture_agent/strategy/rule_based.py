@@ -148,6 +148,7 @@ class RuleBasedStrategy:
             state.hour == 0
             and state.remaining_days > 1
             and next_land_index < len(LAND_PRICES)
+            and features.farm.utilization >= 0.80
         )
         next_land_cost = LAND_PRICES[next_land_index] if can_expand else 0
         new_land_tiles = (max(1, state.board_size // 2)) ** 2

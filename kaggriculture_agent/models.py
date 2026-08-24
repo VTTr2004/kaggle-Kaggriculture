@@ -91,6 +91,7 @@ class FarmFeatures:
     weed_count: int
     urgent_count: int
     unlocked_tile_count: int
+    utilization: float = 0.0
 
 
 @dataclass(frozen=True)
