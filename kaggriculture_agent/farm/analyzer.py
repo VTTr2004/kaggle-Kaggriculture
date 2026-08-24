@@ -104,6 +104,7 @@ def analyze_farm(state: GameState) -> FarmFeatures:
 
     tasks.sort(key=lambda task: (-task.priority, task.target[1], task.target[0]))
     urgent = sum(task.priority >= 900.0 for task in tasks)
+    productive_tiles = plants + animals
     return FarmFeatures(
         tasks=tuple(tasks),
         empty_tiles=tuple(empty_tiles),
@@ -112,4 +113,5 @@ def analyze_farm(state: GameState) -> FarmFeatures:
         weed_count=weeds,
         urgent_count=urgent,
         unlocked_tile_count=unlocked,
+        utilization=productive_tiles / max(1, unlocked),
     )

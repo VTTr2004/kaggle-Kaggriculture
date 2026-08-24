@@ -1,46 +1,70 @@
-# Architecture và workflow 2 người
+# Runtime architecture
 
-## Dependency rule
-
-Luồng dependency chỉ đi xuống:
+## Per-turn pipeline
 
 ```text
-domain/models <- state <- farm,economy <- features <- strategy <- fusion <- execution <- agent
+Kaggle Observation
+        |
+        v
+build_state() ------------------------- shared, read-only contract
+        |
+        +--------------------+
+        |                    |
+        v                    v
+analyze_farm()       analyze_economy()
+FarmFeatures         EconomyFeatures
+        |                    |
+        +---------+----------+
+                  v
+        RuleBasedStrategy.decide()
+        - select production target
+        - combine capacity with value
+        - call Farm planner for units
+        - accept/reject Economy quotes
+                  |
+                  v
+           fuse_decisions()
+        hard validation only
+                  |
+                  v
+         to_kaggle_action()
+                  |
+                  v
+        {farmer, hands, market}
 ```
 
-`farm/` không được import `economy/` và ngược lại. Hai nhánh không trả raw
-Kaggle actions; chúng trả immutable feature dataclasses trong `models.py`.
-Nhờ vậy từng người có thể thay rules bằng search/ML độc lập.
+Farm and Economy analysis are conceptually parallel and must not import each
+other. Python currently invokes them sequentially, but both are pure reads of
+the same immutable `GameState`, so their call order has no semantic meaning.
 
-## Module contracts
+## Contracts
 
-- `build_state(obs, config) -> GameState`: chuẩn hóa dict hoặc Kaggle Struct.
-- `analyze_farm(state) -> FarmFeatures`: phát hiện maintenance tasks và capacity.
-- `analyze_economy(state) -> EconomyFeatures`: crop opportunity, demand, sell intents.
-- `build_strategic_features(...) -> StrategicFeatures`: điểm gặp duy nhất của hai nhánh.
-- `Strategy.decide(features) -> StrategyPlan`: rule-based hiện tại; model sau này chỉ cần giữ interface.
-- `fuse_decisions(state, plan) -> FinalDecision`: giới hạn seed, cash, order count, hand count.
-- `to_kaggle_action(decision) -> dict`: biên duy nhất tạo wire format.
+- `GameState`: normalized observation; opponent private state never exists.
+- `FarmFeatures`: tasks, empty land, workload and physical utilization.
+- `EconomyFeatures`: crop opportunities, direct market candidates, investment
+  quotes, demand, prices, visible opponent supply and spendable cash.
+- `StrategyPlan`: selected production target plus unit and market intentions.
+- `FinalDecision`: validated commands ready for serialization.
 
-## Git workflow đề xuất
+## Why Shared Strategy exists
 
-1. `main` luôn chạy được và chỉ nhận thay đổi qua PR.
-2. Person 1 làm `farm/<experiment>`, Person 2 làm `economy/<experiment>`.
-3. Mỗi PR chỉ sửa module sở hữu + test tương ứng. Nếu đổi `models.py`, cả hai review.
-4. Rebase/merge `main`, chạy `pytest`, rồi benchmark cùng danh sách seed.
-5. Chỉ merge nếu không giảm win rate ngoài ngưỡng team thống nhất; lưu command,
-   commit hash và kết quả benchmark trong mô tả PR.
+Some decisions cannot belong solely to one specialist:
 
-## Nâng cấp Rule -> ML -> RL -> Self-play
+- `BUY_SEED`: Economy ranks/costs the crop; Farm reports planting capacity.
+- `HIRE`: Economy quotes Fibonacci cost; Farm reports whether work exists.
+- `BUY_LAND`: Economy evaluates capital/time; Farm reports utilization.
+- Animals: Economy ranks purchase/payback; Farm must build, place, feed and
+  collect products.
+- Fertilizer: Economy values it; Farm schedules pickup and application.
 
-Không thay entry point. Thêm implementation mới của protocol `Strategy` trong
-`strategy/base.py`, sau đó chọn implementation trong `agent.py`.
+Shared Strategy combines these signals. Decision Fusion stays after Strategy
+because it is a safety gate, not an advisor.
 
-- Farm ML dự đoán task value/travel cost, vẫn xuất `FarmFeatures`.
-- Economy ML dự đoán future price/demand, vẫn xuất `EconomyFeatures`.
-- RL policy đọc `StrategicFeatures`, xuất `StrategyPlan`.
-- Self-play chỉ là pipeline train/evaluate bên ngoài runtime; artifact model được
-  đóng cùng package và inference vẫn tuân `Strategy` contract.
+## Environment ordering constraint
 
-Tránh state global theo player: validation của Kaggle cho agent đấu với bản sao
-của chính nó và hai invocation có thể dùng chung module process.
+The interpreter applies existing unit actions, then processes ordered market
+queues, town demand, refresh and observations. Therefore a seed, animal,
+fertilizer product or hand purchased this turn cannot be assumed available to
+the current turn's unit planner.
+
+See [team roles](team-roles.md) for ownership and handoff rules.

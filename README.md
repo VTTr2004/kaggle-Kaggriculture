@@ -60,8 +60,9 @@ Replay mặc định được ghi vào `replays/`. Chạy smoke test ngắn bằ
 | Test riêng | `tests/test_farm.py` | `tests/test_economy.py` |
 
 Các file shared (`models.py`, `features.py`, `strategy/`, `fusion.py`) nên đổi
-qua PR nhỏ và cần cả hai review vì đây là contract tích hợp. Chi tiết dependency
-rule và quy trình branch/merge nằm ở [docs/architecture.md](docs/architecture.md).
+qua PR nhỏ và cần cả hai review vì đây là contract tích hợp. Đọc
+[team roles](docs/team-roles.md), [runtime architecture](docs/architecture.md) và
+rule bắt buộc trong [AGENTS.md](AGENTS.md) trước khi bắt đầu.
 
 ## Cấu trúc
 
