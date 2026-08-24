@@ -1,6 +1,6 @@
 from kaggriculture_agent.economy import analyze_economy
-from kaggriculture_agent.features import build_strategic_features
 from kaggriculture_agent.farm import analyze_farm
+from kaggriculture_agent.features import build_strategic_features
 from kaggriculture_agent.models import EconomyFeatures
 from kaggriculture_agent.state import build_state
 from kaggriculture_agent.strategy import RuleBasedStrategy

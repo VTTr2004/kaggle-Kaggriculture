@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-from collections import Counter
-
-from ..domain import BASE_PRICES, CROPS, SHOP_DEMAND
+from ..domain import BASE_PRICES, CROPS, LAND_PRICES, hire_cost
 from ..models import AgentSettings, CropOpportunity, EconomyFeatures, GameState, MarketIntent
-from .forecast import StatisticalMarketForecaster
-
-
-def _town_demand(state: GameState) -> dict[str, int]:
-    demand: Counter[str] = Counter({item: 1 for item in BASE_PRICES})
-    # Town center buys every product, so every product starts with weight one.
-    for shop in state.town.get("unlocked_shops", ()) or ():
-        demand.update(SHOP_DEMAND.get(str(shop), ()))
-    return dict(demand)
+from .forecast import StatisticalMarketForecaster, average_daily_town_demand, forecast_crop
+from .investment import value_next_land
+from .selling import forecast_sell
+from .snapshot import build_economy_snapshot
 
 
 def analyze_economy(
@@ -22,9 +15,15 @@ def analyze_economy(
     settings: AgentSettings | None = None,
     forecaster: StatisticalMarketForecaster | None = None,
 ) -> EconomyFeatures:
-    """Rank crops and emit sell proposals; it never schedules farm units."""
+    """Rank crops and emit market proposals; never schedule farm units."""
     settings = settings or AgentSettings()
-    prices = state.market.get("prices", {}) or {}
+    snapshot = build_economy_snapshot(state)
+    prices = snapshot.prices
+    demand = {item: average_daily_town_demand(state, snapshot, item) for item in BASE_PRICES}
+    ratios = {
+        item: float(prices.get(item, base)) / float(base) for item, base in BASE_PRICES.items()
+    }
+
     price_forecast = {}
     if forecaster is not None:
         forecaster.observe(prices)
@@ -32,74 +31,117 @@ def analyze_economy(
         price_forecast = getattr(projected, "prices", projected)
         if isinstance(price_forecast, dict) and "prices" in price_forecast:
             price_forecast = price_forecast["prices"]
-    demand = _town_demand(state)
-    ratios = {
-        item: float(prices.get(item, base)) / float(base) for item, base in BASE_PRICES.items()
-    }
 
     opportunities: list[CropOpportunity] = []
     for crop, spec in CROPS.items():
-        feasible = state.remaining_days > spec.max_yield_day
-        units = spec.unfertilized_yield
-        price = float(prices.get(crop, spec.base_price))
-        revenue = units * price
+        forecast = forecast_crop(state, snapshot, crop)
+        feasible = snapshot.remaining_days > forecast.occupied_days
+        revenue = forecast.expected_revenue
         profit = revenue - spec.seed_cost
-        demand_bonus = 1.0 + 0.04 * max(0, demand.get(crop, 1) - 1)
-        score = (profit / max(1, spec.max_yield_day)) * demand_bonus * ratios[crop]
+        score = profit / max(1, forecast.occupied_days)
         if not feasible:
             score = float("-inf")
-        opportunities.append(CropOpportunity(crop, units, revenue, profit, score, feasible))
+        opportunities.append(
+            CropOpportunity(
+                crop=crop,
+                seed_cost=spec.seed_cost,
+                days_to_maturity=forecast.occupied_days,
+                expected_units=forecast.expected_units,
+                expected_revenue=revenue,
+                expected_profit=profit,
+                expected_sell_price=forecast.expected_average_price,
+                current_market_inventory=forecast.current_inventory,
+                projected_market_inventory=forecast.projected_inventory,
+                projected_town_consumption=forecast.town_consumption,
+                own_supply_assumption=forecast.own_pending_supply,
+                opponent_supply_assumption=forecast.opponent_visible_supply,
+                yield_days=forecast.yield_days,
+                expected_unit_prices=forecast.expected_unit_prices,
+                known_town_consumption=forecast.known_town_consumption,
+                expected_future_shop_consumption=forecast.expected_future_shop_consumption,
+                score=score,
+                feasible=feasible,
+            )
+        )
     opportunities.sort(key=lambda value: (-value.score, value.crop))
 
-    seeds = state.private.get("seeds", {}) or {}
-    empty_tiles = sum(1 for row in (state.tiles or ()) for tile in (row or ()) if tile is None)
-    buy_intents: list[MarketIntent] = []
-    for opportunity in opportunities:
-        if not opportunity.feasible or opportunity.expected_profit <= 0:
-            continue
-        current = int(seeds.get(opportunity.crop, 0) or 0)
-        quantity = max(0, min(empty_tiles - current, 6))
-        affordable = int(max(0.0, state.money - settings.cash_reserve) // CROPS[opportunity.crop].seed_cost)
-        quantity = min(quantity, affordable)
-        if quantity > 0:
-            buy_intents.append(MarketIntent(
-                command=("BUY_SEED", opportunity.crop, quantity),
-                priority=700.0 + opportunity.score,
-                estimated_cost=float(quantity * CROPS[opportunity.crop].seed_cost),
-                reason=f"buy highest-priority seed ({opportunity.crop})",
-            ))
-        break
-
-    sell_intents: list[MarketIntent] = []
-    shed = state.private.get("shed", {}) or {}
-    for item, raw_count in shed.items():
+    market_intents: list[MarketIntent] = []
+    sell_opportunities = []
+    for item, raw_count in snapshot.shed.items():
         count = int(raw_count or 0)
         if count <= 0 or item not in BASE_PRICES:
             continue
-        ratio = ratios.get(item, 1.0)
-        final_day = state.remaining_days <= 1
-        should_sell = (
-            final_day
-            or ratio >= settings.sell_price_floor_ratio
-        )
-        if should_sell:
-            sell_intents.append(
+        sell = forecast_sell(state, snapshot, item, count, settings)
+        sell_opportunities.append(sell)
+        if sell.recommend_sell:
+            market_intents.append(
                 MarketIntent(
                     command=("SELL", item, count),
-                    priority=1200.0 if final_day else 880.0 + ratio * 100.0,
-                    reason=(
-                        f"liquidate {count} {item}"
-                        f" (price ratio={ratio:.2f})"
+                    priority=(
+                        1200.0
+                        if snapshot.remaining_days <= 1
+                        else 900.0 + sell.immediate_revenue / max(1, count)
                     ),
+                    reason=sell.reason,
                 )
             )
-    sell_intents.sort(key=lambda intent: -intent.priority)
+    market_intents.sort(key=lambda intent: -intent.priority)
+
+    investment_intents: list[MarketIntent] = []
+    if snapshot.remaining_days > 1 and snapshot.hour <= 2:
+        missing = max(0, settings.target_hands - snapshot.current_hands)
+        for offset in range(missing):
+            cost = hire_cost(snapshot.hires_today + offset, state.farm_hand_cost_mult)
+            investment_intents.append(
+                MarketIntent(("HIRE",), 1040.0, float(cost), "quote daily labor")
+            )
+
+    land_opportunity = None
+    land_index = snapshot.unlocked_land_count - 1
+    if snapshot.remaining_days > 12 and 0 <= land_index < len(LAND_PRICES):
+        land_cost = LAND_PRICES[land_index]
+        best_crop = next(
+            (
+                opportunity
+                for opportunity in opportunities
+                if opportunity.feasible and opportunity.expected_profit > 0
+            ),
+            None,
+        )
+        if best_crop is not None:
+            land_opportunity = value_next_land(best_crop, land_cost, snapshot.market_params)
+        if (
+            land_opportunity is not None
+            and land_opportunity.net_value_after_land > 0
+            and snapshot.money >= land_cost + settings.expand_cash_reserve
+        ):
+            investment_intents.append(
+                MarketIntent(
+                    ("BUY_LAND",),
+                    680.0,
+                    float(land_cost),
+                    "one-cycle land value is positive; Farm capacity still required",
+                )
+            )
+
     return EconomyFeatures(
         crop_opportunities=tuple(opportunities),
-        sell_intents=tuple(sell_intents),
+        sell_intents=tuple(market_intents),
+        sell_opportunities=tuple(sell_opportunities),
+        land_opportunity=land_opportunity,
+        market_intents=tuple(market_intents),
+        investment_intents=tuple(investment_intents),
         demand=demand,
         price_ratios=ratios,
+        opponent_visible_supply=snapshot.opponent_visible_supply,
+        spendable_cash=max(0.0, snapshot.money - settings.cash_reserve),
         price_forecast=price_forecast,
-        seed_priority={opportunity.crop: opportunity.score for opportunity in opportunities if opportunity.feasible},
-        buy_intents=tuple(buy_intents),
+        seed_priority={
+            opportunity.crop: opportunity.score
+            for opportunity in opportunities
+            if opportunity.feasible
+        },
+        # Seed quantity combines Economy value with Farm capacity, so Strategy
+        # owns that decision rather than Economy.
+        buy_intents=(),
     )

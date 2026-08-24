@@ -12,7 +12,7 @@ def test_agent_holds_inventory_when_forecast_is_neutral() -> None:
         "consecutive_unwatered": 1,
         "yield_units": 1,
     }
-    action = agent(observation(farmer=(0, 0), tiles=tiles, shed={"WHEAT": 3}, hour=3))
+    action = agent(observation(farmer=(0, 0), tiles=tiles, shed={"WHEAT": 3}, day=29, hour=3))
     assert action["farmer"] == ["EAST"]
     assert ["SELL", "WHEAT", 3] in action["market"]
     assert set(action) == {"farmer", "hands", "market"}

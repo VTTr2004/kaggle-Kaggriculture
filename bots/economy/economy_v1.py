@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
-from collections.abc import Mapping
-from typing import Any
 
 from kaggriculture_agent.domain import BASE_PRICES, SHOP_DEMAND
 
@@ -33,8 +31,10 @@ class EconomyV1(EconomyBot):
         raw_prices = market.get("prices", {}) or {}
         prices_now = {str(item): float(value) for item, value in raw_prices.items()}
         trends = {
-            item: 1 if price > self._previous_prices.get(item, price)
-            else -1 if price < self._previous_prices.get(item, price)
+            item: 1
+            if price > self._previous_prices.get(item, price)
+            else -1
+            if price < self._previous_prices.get(item, price)
             else 0
             for item, price in prices_now.items()
         }
@@ -62,7 +62,6 @@ class EconomyV1(EconomyBot):
 
     def _build_market_orders(self, observation, analysis):
         step = self.step(observation)
-        hour = self.hour(observation)
         day = self.day(observation)
         if step == 0:
             return opening_seed_orders(

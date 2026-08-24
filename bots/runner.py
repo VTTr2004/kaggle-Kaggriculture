@@ -9,7 +9,6 @@ from typing import Any
 
 from kaggle_environments import make
 
-
 Bot = Callable[[Mapping[str, Any], Any], dict[str, Any]]
 
 

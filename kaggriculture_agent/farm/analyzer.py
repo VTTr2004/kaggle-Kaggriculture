@@ -22,7 +22,7 @@ def _plant_tasks(state: GameState, x: int, y: int, tile: dict[str, Any]) -> list
     last_safe_day = state.day >= state.total_days - 1
 
     ready = age >= spec.first_yield_day and yield_units > 0
-    at_peak = spec.ongoing or age >= spec.max_yield_day or last_safe_day
+    at_peak = spec.ongoing or age >= spec.unfertilized_peak_day or last_safe_day
     if ready and at_peak:
         tasks.append(
             FarmTask(

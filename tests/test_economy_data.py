@@ -3,7 +3,6 @@ from pathlib import Path
 
 from kaggriculture_agent.domain import BASE_PRICES, CROPS, SHOP_DEMAND
 
-
 DATA_DIR = Path(__file__).parents[1] / "data" / "economy"
 
 

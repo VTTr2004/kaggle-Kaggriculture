@@ -18,19 +18,31 @@ def _empty_nw_board() -> list[list[object]]:
     return board
 
 
+def _utilized_nw_board() -> list[list[object]]:
+    board = _empty_nw_board()
+    for y in range(4):
+        for x in range(5):
+            board[y][x] = {
+                "kind": "PLANT",
+                "crop": "WHEAT",
+                "planted_day": 1,
+                "watered_today": True,
+                "yield_units": 0,
+            }
+    return board
+
+
 def test_expands_when_land_and_seeds_for_new_empty_tiles_are_affordable():
     state = build_state(
         observation(
             day=1,
             hour=0,
             money=1500,
-            tiles=_empty_nw_board(),
+            tiles=_utilized_nw_board(),
         ),
         {"boardSize": 10, "episodeSteps": 720},
     )
-    features = build_strategic_features(
-        state, analyze_farm(state), analyze_economy(state)
-    )
+    features = build_strategic_features(state, analyze_farm(state), analyze_economy(state))
 
     intents = RuleBasedStrategy(AgentSettings())._market_intents(features, "WHEAT")
     commands = [intent.command for intent in intents]
@@ -46,13 +58,11 @@ def test_expands_using_the_value_of_products_in_the_shed():
             hour=0,
             money=1200,
             shed={"WHEAT": 20},
-            tiles=_empty_nw_board(),
+            tiles=_utilized_nw_board(),
         ),
         {"boardSize": 10, "episodeSteps": 720},
     )
-    features = build_strategic_features(
-        state, analyze_farm(state), analyze_economy(state)
-    )
+    features = build_strategic_features(state, analyze_farm(state), analyze_economy(state))
 
     intents = RuleBasedStrategy(AgentSettings())._market_intents(features, "WHEAT")
     commands = [intent.command for intent in intents]
@@ -68,7 +78,7 @@ def test_expansion_check_includes_projected_hardcoded_farm_profit():
             day=1,
             hour=0,
             money=0,
-            tiles=_empty_nw_board(),
+            tiles=_utilized_nw_board(),
         ),
         {"boardSize": 10, "episodeSteps": 720},
     )
@@ -81,7 +91,7 @@ def test_expansion_check_includes_projected_hardcoded_farm_profit():
     commands = [intent.command for intent in intents]
 
     assert ("BUY_LAND",) in commands
-    assert ("BUY_SEED", "WHEAT", 50) in commands
+    assert ("BUY_SEED", "WHEAT", 30) in commands
 
 
 def test_projected_profit_is_not_rechecked_without_a_previous_day_harvest():
@@ -94,9 +104,7 @@ def test_projected_profit_is_not_rechecked_without_a_previous_day_harvest():
         ),
         {"boardSize": 10, "episodeSteps": 720},
     )
-    features = build_strategic_features(
-        state, analyze_farm(state), analyze_economy(state)
-    )
+    features = build_strategic_features(state, analyze_farm(state), analyze_economy(state))
 
     intents = RuleBasedStrategy(AgentSettings())._market_intents(features, "WHEAT")
 

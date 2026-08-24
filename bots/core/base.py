@@ -79,9 +79,7 @@ class EconomyBot(MiniBot):
         return self.action(market=self._build_market_orders(observation, analysis))
 
     @abstractmethod
-    def forecast_prices(
-        self, observation: Mapping[str, Any], horizon: int
-    ) -> MarketAnalysis:
+    def forecast_prices(self, observation: Mapping[str, Any], horizon: int) -> MarketAnalysis:
         raise NotImplementedError
 
     @abstractmethod

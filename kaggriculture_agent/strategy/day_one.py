@@ -11,22 +11,45 @@ from collections.abc import Sequence
 
 from ..models import Command, GameState, MarketIntent
 
-
 WHEAT_SEED_COUNT = 50
 
 # The black and red routes are the two top-quadrant planter routes. The yellow
 # route is represented by the one-tile-lag follower schedule below.
 ROUTE_BLACK: tuple[str, ...] = (
-    "WEST", "WEST", "WEST", "WEST",
-    "NORTH", "NORTH", "NORTH", "NORTH",
-    "EAST", "EAST", "EAST", "EAST",
-    "SOUTH", "SOUTH", "SOUTH", "SOUTH",
+    "WEST",
+    "WEST",
+    "WEST",
+    "WEST",
+    "NORTH",
+    "NORTH",
+    "NORTH",
+    "NORTH",
+    "EAST",
+    "EAST",
+    "EAST",
+    "EAST",
+    "SOUTH",
+    "SOUTH",
+    "SOUTH",
+    "SOUTH",
 )
 ROUTE_RED: tuple[str, ...] = (
-    "EAST", "EAST", "EAST", "EAST",
-    "NORTH", "NORTH", "NORTH", "NORTH",
-    "WEST", "WEST", "WEST", "WEST",
-    "SOUTH", "SOUTH", "SOUTH", "SOUTH",
+    "EAST",
+    "EAST",
+    "EAST",
+    "EAST",
+    "NORTH",
+    "NORTH",
+    "NORTH",
+    "NORTH",
+    "WEST",
+    "WEST",
+    "WEST",
+    "WEST",
+    "SOUTH",
+    "SOUTH",
+    "SOUTH",
+    "SOUTH",
 )
 PLANTER_ROUTES: tuple[tuple[str, ...], ...] = (ROUTE_BLACK, ROUTE_RED)
 
@@ -100,8 +123,10 @@ def _follower_command(state: GameState, unit_index: int) -> Command:
     paired_planter = unit_index - 2
     position = state.unit_positions[unit_index]
     tile = _tile(state, position)
-    if isinstance(tile, dict) and tile.get("kind") == "PLANT" and not tile.get(
-        "watered_today", False
+    if (
+        isinstance(tile, dict)
+        and tile.get("kind") == "PLANT"
+        and not tile.get("watered_today", False)
     ):
         return ("WATER",)
     if state.step == 1:

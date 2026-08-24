@@ -32,7 +32,8 @@ class RuleBasedStrategy:
                 for opportunity in features.economy.crop_opportunities
             }
             stocked = [
-                crop for crop, _ in sorted(
+                crop
+                for crop, _ in sorted(
                     features.economy.seed_priority.items(),
                     key=lambda item: (-item[1], item[0]),
                 )
@@ -156,18 +157,12 @@ class RuleBasedStrategy:
         shed = state.private.get("shed", {}) or {}
         market_prices = state.market.get("prices", {}) or {}
         projected_shed_value = sum(
-            int(count or 0)
-            * float(market_prices.get(item, BASE_PRICES.get(item, 0)))
+            int(count or 0) * float(market_prices.get(item, BASE_PRICES.get(item, 0)))
             for item, count in shed.items()
             if item in BASE_PRICES and int(count or 0) > 0
         )
         projected_farm_profit = 0.0
-        if (
-            can_expand
-            and selected_crop
-            and state.hour == 0
-            and state.harvested_previous_day
-        ):
+        if can_expand and selected_crop and state.hour == 0 and state.harvested_previous_day:
             planning_horizon = state.remaining_days
             if planning_horizon > 0:
                 farm_plan = (
@@ -197,13 +192,9 @@ class RuleBasedStrategy:
             spec = CROPS[selected_crop]
             if can_expand:
                 required_seeds_after_expansion = len(features.farm.empty_tiles) + new_land_tiles
-                missing_for_expansion = max(
-                    0, required_seeds_after_expansion - current_seeds
-                )
+                missing_for_expansion = max(0, required_seeds_after_expansion - current_seeds)
                 expansion_cost = next_land_cost + missing_for_expansion * spec.seed_cost
-                projected_money = (
-                    state.money + projected_shed_value + projected_farm_profit
-                )
+                projected_money = state.money + projected_shed_value + projected_farm_profit
                 if projected_money >= expansion_cost:
                     expansion_seed_quantity = missing_for_expansion
 
@@ -258,7 +249,7 @@ class RuleBasedStrategy:
                 MarketIntent(
                     ("BUY_LAND",),
                     1100.0,
-                            float(next_land_cost),
+                    float(next_land_cost),
                     "expand when current, shed, and projected farm money cover land and seeds",
                 )
             )

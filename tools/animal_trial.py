@@ -7,7 +7,6 @@ from typing import Any
 
 from kaggle_environments import make
 
-
 COOP_POSITION = (4, 4)
 
 

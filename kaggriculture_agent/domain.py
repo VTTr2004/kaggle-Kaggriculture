@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -18,6 +18,14 @@ class CropSpec:
     ongoing: bool
     unfertilized_yield: int
 
+    @property
+    def unfertilized_peak_day(self) -> int:
+        """Earliest official day that the modeled unfertilized yield is ready."""
+        if self.ongoing:
+            return self.first_yield_day + (self.unfertilized_yield - 1) * self.interval
+        bonus_window_start = (self.max_yield_day + 1) // 2
+        return bonus_window_start + max(0, self.unfertilized_yield - 2)
+
 
 _ECONOMY_DATA = Path(__file__).resolve().parents[1] / "data" / "economy"
 
@@ -28,9 +36,7 @@ def _load_json(name: str):
 
 
 _CROP_RULES = _load_json("crop_rules.json")
-CROPS: dict[str, CropSpec] = {
-    name: CropSpec(**values) for name, values in _CROP_RULES.items()
-}
+CROPS: dict[str, CropSpec] = {name: CropSpec(**values) for name, values in _CROP_RULES.items()}
 
 
 @dataclass(frozen=True)

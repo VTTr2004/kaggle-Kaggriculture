@@ -14,9 +14,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from .pathfinding import distance, next_move
 from ..models import FarmFeatures, FarmTask, GameState, UnitIntent
-
+from .pathfinding import distance, next_move
 
 # Deliberately static for the first farm-only search.  This is not connected to
 # the economy forecaster; replace this table manually when the competition
@@ -112,10 +111,7 @@ def hardcoded_price_series(horizon_days: int) -> dict[str, tuple[float, ...]]:
 
     if horizon_days < 0:
         raise ValueError("horizon_days must be non-negative")
-    return {
-        crop: (price,) * horizon_days
-        for crop, price in HARDCODED_BASE_PRICES.items()
-    }
+    return {crop: (price,) * horizon_days for crop, price in HARDCODED_BASE_PRICES.items()}
 
 
 def build_hardcoded_farm_plans(
@@ -138,9 +134,7 @@ def build_hardcoded_farm_plans(
             current_day=current_day,
             remaining_days=horizon,
             free_tiles=min(1, tile_count),
-            price_forecast={
-                crop: values[:horizon] for crop, values in prices.items()
-            },
+            price_forecast={crop: values[:horizon] for crop, values in prices.items()},
             existing_plants=existing_plants,
         )
         plans[horizon] = _repeat_independent_plan(single_tile_plan, tile_count)
@@ -152,12 +146,8 @@ def _repeat_independent_plan(plan: FarmPlan, count: int) -> FarmPlan:
 
     if count <= 0 or not plan.projections:
         return FarmPlan({}, {}, 0.0, 0.0, ())
-    seed_targets = {
-        crop: quantity * count for crop, quantity in plan.seed_targets.items()
-    }
-    planting_days = {
-        crop: days * count for crop, days in plan.planting_days.items()
-    }
+    seed_targets = {crop: quantity * count for crop, quantity in plan.seed_targets.items()}
+    planting_days = {crop: days * count for crop, days in plan.planting_days.items()}
     projections = plan.projections * count
     return FarmPlan(
         seed_targets=seed_targets,
@@ -173,9 +163,7 @@ def farm_plan_to_dict(plan: FarmPlan) -> dict[str, Any]:
 
     return {
         "seed_targets": dict(plan.seed_targets),
-        "planting_days": {
-            crop: list(days) for crop, days in plan.planting_days.items()
-        },
+        "planting_days": {crop: list(days) for crop, days in plan.planting_days.items()},
         "projected_profit": plan.projected_profit,
         "projected_revenue": plan.projected_revenue,
         "projections": [
@@ -223,9 +211,7 @@ def _value(value: Any, key: str, default: Any) -> Any:
     return getattr(value, key, default)
 
 
-def extract_farm_snapshot(
-    observation: Any, remaining_days: int, player: int = 0
-) -> FarmSnapshot:
+def extract_farm_snapshot(observation: Any, remaining_days: int, player: int = 0) -> FarmSnapshot:
     """Extract farm planning state from the official observation shape."""
 
     farms = _value(observation, "farms", ()) or ()
@@ -412,7 +398,14 @@ def plan_unit_actions(
         ]
         candidates = [task for task in candidates if task.target not in used_targets]
         if candidates:
-            task = min(candidates, key=lambda value: (-value.priority, distance(position, value.target), value.target))
+            task = min(
+                candidates,
+                key=lambda value: (
+                    -value.priority,
+                    distance(position, value.target),
+                    value.target,
+                ),
+            )
             assignments[unit_index] = task
             used_targets.add(task.target)
 
@@ -424,7 +417,13 @@ def plan_unit_actions(
             continue
         target = min(empty, key=lambda value: (distance(position, value), value[1], value[0]))
         empty.remove(target)
-        assignments[unit_index] = FarmTask(target, ("PLANT", selected_crop), 480.0, "plant", f"plant {selected_crop}")
+        assignments[unit_index] = FarmTask(
+            target,
+            ("PLANT", selected_crop),
+            480.0,
+            "plant",
+            f"plant {selected_crop}",
+        )
         available -= 1
 
     intents = []
@@ -433,7 +432,17 @@ def plan_unit_actions(
         if task is None:
             intents.append(UnitIntent(unit_index, ("PASS",), None, 0.0, "no feasible farm task"))
         elif position == task.target:
-            intents.append(UnitIntent(unit_index, task.command, task.target, task.priority, task.reason))
+            intents.append(
+                UnitIntent(unit_index, task.command, task.target, task.priority, task.reason)
+            )
         else:
-            intents.append(UnitIntent(unit_index, next_move(position, task.target), task.target, task.priority, f"move toward {task.category}"))
+            intents.append(
+                UnitIntent(
+                    unit_index,
+                    next_move(position, task.target),
+                    task.target,
+                    task.priority,
+                    f"move toward {task.category}",
+                )
+            )
     return tuple(intents)

@@ -42,20 +42,13 @@ def agent(observation: Any, configuration: Any = None) -> dict[str, list[Any]]:
             _PREVIOUS_SHED = {}
             _LAST_HARVEST_DAY = None
         shed = state.private.get("shed", {}) or {}
-        if any(
-            int(shed.get(item, 0) or 0) > _PREVIOUS_SHED.get(item, 0)
-            for item in shed
-        ):
+        if any(int(shed.get(item, 0) or 0) > _PREVIOUS_SHED.get(item, 0) for item in shed):
             _LAST_HARVEST_DAY = state.day
         harvested_previous_day = (
-            state.hour == 0
-            and state.day > 0
-            and _LAST_HARVEST_DAY == state.day - 1
+            state.hour == 0 and state.day > 0 and _LAST_HARVEST_DAY == state.day - 1
         )
         state = replace(state, harvested_previous_day=harvested_previous_day)
-        _PREVIOUS_SHED = {
-            str(item): int(count or 0) for item, count in shed.items()
-        }
+        _PREVIOUS_SHED = {str(item): int(count or 0) for item, count in shed.items()}
         _LAST_STEP = state.step
         farm_features = analyze_farm(state)
         economy_features = analyze_economy(state, DEFAULT_SETTINGS, _ECONOMY_FORECASTER)

@@ -12,7 +12,7 @@ Command = tuple[Any, ...]
 
 @dataclass(frozen=True)
 class AgentSettings:
-    target_hands: int = 3
+    target_hands: int = 4
     seed_buffer_per_unit: int = 2
     max_plants_per_unit: int = 5
     cash_reserve: float = 250.0
@@ -32,6 +32,9 @@ class GameState:
     max_market_orders: int
     shed_capacity: int
     farm_hand_cost_mult: int
+    town_shop_unlock_interval: int
+    town_shop_sell_interval: int
+    town_center_sell_interval: int
     farms: Sequence[Mapping[str, Any]]
     me: Mapping[str, Any]
     opponent: Mapping[str, Any]
@@ -97,11 +100,53 @@ class FarmFeatures:
 @dataclass(frozen=True)
 class CropOpportunity:
     crop: str
+    seed_cost: int
+    days_to_maturity: int
     expected_units: int
     expected_revenue: float
     expected_profit: float
+    expected_sell_price: float
+    current_market_inventory: int
+    projected_market_inventory: int
+    projected_town_consumption: int
+    own_supply_assumption: int
+    opponent_supply_assumption: int
+    yield_days: tuple[int, ...]
+    expected_unit_prices: tuple[int, ...]
+    known_town_consumption: float
+    expected_future_shop_consumption: float
     score: float
     feasible: bool
+
+
+@dataclass(frozen=True)
+class SellOpportunity:
+    item: str
+    quantity: int
+    immediate_unit_prices: tuple[int, ...]
+    immediate_revenue: float
+    hold_days: int
+    hold_unit_prices: tuple[int, ...]
+    hold_revenue: float
+    projected_inventory_after_wait: float
+    projected_town_consumption: float
+    opponent_supply_assumption: int
+    recommend_sell: bool
+    reason: str
+
+
+@dataclass(frozen=True)
+class LandOpportunity:
+    crop: str
+    land_cost: float
+    new_tiles: int
+    seed_cost: float
+    expected_units: int
+    expected_revenue: float
+    expected_profit_before_land: float
+    net_value_after_land: float
+    payback_days: float
+    unit_prices: tuple[int, ...]
 
 
 @dataclass(frozen=True)
@@ -116,8 +161,14 @@ class MarketIntent:
 class EconomyFeatures:
     crop_opportunities: tuple[CropOpportunity, ...]
     sell_intents: tuple[MarketIntent, ...]
-    demand: Mapping[str, int]
+    demand: Mapping[str, float]
     price_ratios: Mapping[str, float]
+    sell_opportunities: tuple[SellOpportunity, ...] = field(default_factory=tuple)
+    land_opportunity: LandOpportunity | None = None
+    market_intents: tuple[MarketIntent, ...] = field(default_factory=tuple)
+    investment_intents: tuple[MarketIntent, ...] = field(default_factory=tuple)
+    opponent_visible_supply: Mapping[str, int] = field(default_factory=dict)
+    spendable_cash: float = 0.0
     price_forecast: Mapping[str, Sequence[float]] = field(default_factory=dict)
     seed_priority: Mapping[str, float] = field(default_factory=dict)
     buy_intents: tuple[MarketIntent, ...] = field(default_factory=tuple)

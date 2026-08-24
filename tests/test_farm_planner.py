@@ -4,13 +4,13 @@ from types import SimpleNamespace
 
 from kaggriculture_agent.farm import optimize_farm_plan as exported_optimizer
 from kaggriculture_agent.farm.planner import (
-    build_hardcoded_farm_plans,
-    farm_plan_to_dict,
     OFFICIAL_CROPS,
     PlantState,
+    build_hardcoded_farm_plans,
     days_until_first_yield,
     days_until_harvest,
     extract_farm_snapshot,
+    farm_plan_to_dict,
     optimize_farm_plan,
     project_crop,
 )
@@ -178,13 +178,7 @@ def test_extract_farm_snapshot_accepts_kaggle_style_objects() -> None:
         day=4,
         farms=[
             SimpleNamespace(
-                tiles=[
-                    [
-                        SimpleNamespace(
-                            kind="PLANT", crop="CARROT", planted_day=2, yield_units=1
-                        )
-                    ]
-                ]
+                tiles=[[SimpleNamespace(kind="PLANT", crop="CARROT", planted_day=2, yield_units=1)]]
             )
         ],
     )

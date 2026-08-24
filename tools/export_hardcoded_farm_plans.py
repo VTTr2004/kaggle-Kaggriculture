@@ -17,9 +17,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--current-day", type=int, default=1)
     parser.add_argument("--free-tiles", type=int, default=50)
-    parser.add_argument(
-        "--output", type=Path, default=Path("artifacts/farm_plans_hardcoded.json")
-    )
+    parser.add_argument("--output", type=Path, default=Path("artifacts/farm_plans_hardcoded.json"))
     args = parser.parse_args()
 
     plans = build_hardcoded_farm_plans(

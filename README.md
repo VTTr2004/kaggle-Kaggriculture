@@ -44,6 +44,8 @@ python -m pip install -r requirements-dev.txt
 pytest
 python tools/run_match.py --opponent starter --seed 20260822
 python tools/benchmark.py --opponent starter --seeds 20260820:20260830
+python tools/inspect_economy.py --turn 240 --seed 20260822
+streamlit run dashboard/app.py
 ```
 
 Replay mặc định được ghi vào `replays/`. Chạy smoke test ngắn bằng
@@ -61,8 +63,10 @@ Replay mặc định được ghi vào `replays/`. Chạy smoke test ngắn bằ
 
 Các file shared (`models.py`, `features.py`, `strategy/`, `fusion.py`) nên đổi
 qua PR nhỏ và cần cả hai review vì đây là contract tích hợp. Đọc
-[team roles](docs/team-roles.md), [runtime architecture](docs/architecture.md) và
-rule bắt buộc trong [AGENTS.md](AGENTS.md) trước khi bắt đầu.
+[team roles](docs/team-roles.md), [runtime architecture](docs/architecture.md),
+[Economy getting started](docs/economy-getting-started.md),
+[Economy formulas](docs/economy-formulas.md), [Replay Lab](docs/dashboard.md) và rule bắt buộc
+trong [AGENTS.md](AGENTS.md) trước khi bắt đầu.
 
 ## Cấu trúc
 
@@ -82,6 +86,7 @@ tools/
   run_match.py                  # một trận + replay
   benchmark.py                  # nhiều seed + win rate
   build_submission.py           # tạo artifacts/submission.tar.gz
+dashboard/                      # Streamlit replay/decision inspector local
 tests/                           # unit + integration contract tests
 ```
 

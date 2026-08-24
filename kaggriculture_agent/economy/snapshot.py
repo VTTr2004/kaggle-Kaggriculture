@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
-from ..domain import ANIMALS
+from ..domain import ANIMALS, BASE_PRICES, CROPS
 from ..models import GameState
 
 
@@ -22,6 +23,7 @@ class EconomySnapshot:
     money: float
     prices: Mapping[str, float]
     market_inventory: Mapping[str, int]
+    market_params: Mapping[str, Mapping[str, Any]]
     shed: Mapping[str, int]
     seeds: Mapping[str, int]
     unlocked_shops: tuple[str, ...]
@@ -32,6 +34,7 @@ class EconomySnapshot:
     opponent_money: float
     opponent_crop_counts: Mapping[str, int]
     opponent_visible_supply: Mapping[str, int]
+    own_pending_supply: Mapping[str, int]
 
 
 def _opponent_signals(state: GameState) -> tuple[dict[str, int], dict[str, int]]:
@@ -53,6 +56,34 @@ def _opponent_signals(state: GameState) -> tuple[dict[str, int], dict[str, int]]
     return dict(crop_counts), dict(visible_supply)
 
 
+def _own_pending_supply(state: GameState) -> dict[str, int]:
+    """Observable goods likely to reach market before a new crop finishes."""
+    pending: Counter[str] = Counter()
+    for source in (
+        state.private.get("shed", {}) or {},
+        *(state.private.get("inventories", ()) or ()),
+    ):
+        for item, count in source.items():
+            if item in BASE_PRICES:
+                pending[item] += int(count or 0)
+
+    for row in state.tiles:
+        for tile in row:
+            if not isinstance(tile, dict):
+                continue
+            if tile.get("kind") == "PLANT" and tile.get("crop") in CROPS:
+                crop = str(tile["crop"])
+                current_yield = int(tile.get("yield_units", 0) or 0)
+                spec = CROPS[crop]
+                pending[crop] += (
+                    current_yield if spec.ongoing else max(current_yield, spec.unfertilized_yield)
+                )
+            elif tile.get("animal") in ANIMALS:
+                animal = str(tile["animal"])
+                pending[ANIMALS[animal].product] += int(tile.get("yield_units", 0) or 0)
+    return {item: count for item, count in pending.items() if count > 0}
+
+
 def build_economy_snapshot(state: GameState) -> EconomySnapshot:
     """Copy only the current information Economy is allowed to reason about."""
     shed = state.private.get("shed", {}) or {}
@@ -64,6 +95,7 @@ def build_economy_snapshot(state: GameState) -> EconomySnapshot:
         money=state.money,
         prices=state.market.get("prices", {}) or {},
         market_inventory=state.market.get("inventory", {}) or {},
+        market_params=state.market.get("params", {}) or {},
         shed=shed,
         seeds=state.private.get("seeds", {}) or {},
         unlocked_shops=tuple(state.town.get("unlocked_shops", ()) or ()),
@@ -74,4 +106,5 @@ def build_economy_snapshot(state: GameState) -> EconomySnapshot:
         opponent_money=float(state.opponent.get("money", 0.0) or 0.0),
         opponent_crop_counts=crop_counts,
         opponent_visible_supply=visible_supply,
+        own_pending_supply=_own_pending_supply(state),
     )

@@ -5,7 +5,6 @@ from kaggriculture_agent.strategy.day_one import (
     first_day_market_intents,
     first_day_unit_commands,
 )
-from tests.helpers import observation
 
 
 def _day_one_observation(*, step: int = 0, hands=None, tiles=None, seeds=None):

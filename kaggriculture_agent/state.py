@@ -40,6 +40,13 @@ def build_state(observation: Any, configuration: Any = None) -> GameState:
         max_market_orders=max(1, int(_get(configuration, "maxMarketOrdersPerTurn", 10) or 10)),
         shed_capacity=max(1, int(_get(configuration, "shedCapacity", 100) or 100)),
         farm_hand_cost_mult=max(0, int(_get(configuration, "farmHandCostMult", 1) or 0)),
+        town_shop_unlock_interval=max(
+            1, int(_get(configuration, "townShopUnlockInterval", 3) or 3)
+        ),
+        town_shop_sell_interval=max(1, int(_get(configuration, "townShopSellInterval", 4) or 4)),
+        town_center_sell_interval=max(
+            1, int(_get(configuration, "townCenterSellInterval", 24) or 24)
+        ),
         farms=farms,
         me=farms[player],
         opponent=farms[opponent_index],

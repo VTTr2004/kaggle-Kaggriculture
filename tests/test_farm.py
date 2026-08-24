@@ -40,3 +40,20 @@ def test_farm_planner_consumes_shared_crop_choice_without_pricing() -> None:
     intents = plan_unit_actions(state, features, selected_crop="CARROT")
     assert intents[0].command == ("PLANT", "CARROT")
     assert features.utilization == 0.0
+
+
+def test_melon_is_harvested_when_unfertilized_yield_reaches_cap() -> None:
+    tiles = [[None for _ in range(5)] for _ in range(5)]
+    tiles[4][4] = {
+        "kind": "PLANT",
+        "crop": "MELON",
+        "planted_day": 0,
+        "watered_today": False,
+        "consecutive_unwatered": 0,
+        "yield_units": 6,
+    }
+
+    features = analyze_farm(build_state(observation(tiles=tiles, day=10)))
+
+    harvest = next(task for task in features.tasks if task.category == "harvest")
+    assert harvest.command == ("HARVEST",)

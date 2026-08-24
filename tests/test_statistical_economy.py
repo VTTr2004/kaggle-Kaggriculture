@@ -11,9 +11,9 @@ def test_statistical_forecaster_uses_median_projection_and_basic_statistics() ->
 
 
 def test_economy_no_longer_exposes_ml_direction_or_confidence() -> None:
-    from tests.helpers import observation
     from kaggriculture_agent.economy import analyze_economy
     from kaggriculture_agent.state import build_state
+    from tests.helpers import observation
 
     economy = analyze_economy(build_state(observation(day=1)))
 

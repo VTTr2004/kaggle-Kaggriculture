@@ -15,12 +15,18 @@ def test_state_normalizes_config_and_units() -> None:
         maxMarketOrdersPerTurn=7,
         shedCapacity=80,
         farmHandCostMult=2,
+        townShopUnlockInterval=2,
+        townShopSellInterval=3,
+        townCenterSellInterval=12,
     )
     state = build_state(obs, config)
     assert state.total_days == 10
     assert state.unit_positions == ((4, 4), (3, 4))
     assert state.inventories[1]["WHEAT"] == 1
     assert state.max_market_orders == 7
+    assert state.town_shop_unlock_interval == 2
+    assert state.town_shop_sell_interval == 3
+    assert state.town_center_sell_interval == 12
 
 
 def test_state_rejects_missing_farm() -> None:

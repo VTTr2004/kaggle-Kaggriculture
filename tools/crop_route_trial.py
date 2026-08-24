@@ -7,7 +7,6 @@ from typing import Any
 
 from kaggle_environments import make
 
-
 CROPS = ("WHEAT", "CARROT", "TOMATO", "STRAWBERRY", "MELON", "WHEAT")
 TARGETS = ((4, 4), (5, 4), (4, 3), (5, 3), (3, 4), (6, 4))
 INITIAL_PLANTERS = {0: 0, 1: 1, 4: 2, 5: 3, 8: 4, 9: 5}
@@ -60,11 +59,7 @@ def _initial_action(observation: Any, unit_index: int) -> list[Any]:
         position = _position(observation, unit_index)
         target = TARGETS[route]
         value = _tile(observation, target)
-        if (
-            position == target
-            and isinstance(value, dict)
-            and not value.get("watered_today", False)
-        ):
+        if position == target and isinstance(value, dict) and not value.get("watered_today", False):
             return ["WATER"]
         return [_move(position, target)]
     return ["PASS"]
@@ -86,9 +81,7 @@ def _ongoing_harvest_routes(observation: Any) -> tuple[int, ...]:
     return tuple(ready)
 
 
-def _service_assignments(
-    observation: Any, unit_count: int
-) -> tuple[tuple[int, bool], ...]:
+def _service_assignments(observation: Any, unit_count: int) -> tuple[tuple[int, bool], ...]:
     """Assign one primary worker per route and extras to ready regrow routes."""
 
     base_count = min(unit_count, len(TARGETS))
@@ -115,9 +108,7 @@ def _service_action(
 
     first_day, peak_day, ongoing = CROP_RULES[value["crop"]]
     age = int(observation["day"]) - int(value.get("planted_day", 0))
-    ready = int(value.get("yield_units", 0) or 0) > 0 and (
-        ongoing or age >= peak_day
-    )
+    ready = int(value.get("yield_units", 0) or 0) > 0 and (ongoing or age >= peak_day)
     if position == target and ready and allow_harvest:
         return ["HARVEST"]
     if position == target and not value.get("watered_today", False):
@@ -168,8 +159,7 @@ def run(steps: int = 720) -> None:
     env.run([crop_route_agent, "pass"])
 
     route_stats = [
-        {"crop": crop, "plant": 0, "water": 0, "harvest": 0, "units": 0}
-        for crop in CROPS
+        {"crop": crop, "plant": 0, "water": 0, "harvest": 0, "units": 0} for crop in CROPS
     ]
     daily = defaultdict(lambda: {"plant": 0, "water": 0, "harvest": 0, "units": 0})
     for state in env.steps[:-1]:
@@ -177,9 +167,7 @@ def run(steps: int = 720) -> None:
         action = crop_route_agent(observation, env.configuration)
         commands = [action["farmer"], *action["hands"]]
         assignments = (
-            _service_assignments(observation, len(commands))
-            if int(observation["day"]) > 0
-            else ()
+            _service_assignments(observation, len(commands)) if int(observation["day"]) > 0 else ()
         )
         for index, command in enumerate(commands):
             if index not in INITIAL_PLANTERS and int(observation["day"]) == 0:
@@ -187,9 +175,7 @@ def run(steps: int = 720) -> None:
             if int(observation["day"]) > 0 and index >= len(assignments):
                 continue
             route = (
-                INITIAL_PLANTERS[index]
-                if int(observation["day"]) == 0
-                else assignments[index][0]
+                INITIAL_PLANTERS[index] if int(observation["day"]) == 0 else assignments[index][0]
             )
             stats = route_stats[route]
             day_stats = daily[int(observation["day"])]
