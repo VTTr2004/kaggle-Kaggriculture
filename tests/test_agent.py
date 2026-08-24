@@ -2,7 +2,7 @@ from main import agent
 from tests.helpers import observation
 
 
-def test_agent_returns_complete_action_and_keeps_market_orders() -> None:
+def test_agent_holds_inventory_when_forecast_is_neutral() -> None:
     tiles = [[None for _ in range(5)] for _ in range(5)]
     tiles[0][2] = {
         "kind": "PLANT",

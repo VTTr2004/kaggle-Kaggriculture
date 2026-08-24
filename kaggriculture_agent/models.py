@@ -12,7 +12,7 @@ Command = tuple[Any, ...]
 
 @dataclass(frozen=True)
 class AgentSettings:
-    target_hands: int = 4
+    target_hands: int = 3
     seed_buffer_per_unit: int = 2
     max_plants_per_unit: int = 5
     cash_reserve: float = 250.0
@@ -38,6 +38,7 @@ class GameState:
     private: Mapping[str, Any]
     market: Mapping[str, Any]
     town: Mapping[str, Any]
+    harvested_previous_day: bool = False
 
     @property
     def money(self) -> float:
@@ -116,6 +117,9 @@ class EconomyFeatures:
     sell_intents: tuple[MarketIntent, ...]
     demand: Mapping[str, int]
     price_ratios: Mapping[str, float]
+    price_forecast: Mapping[str, Sequence[float]] = field(default_factory=dict)
+    seed_priority: Mapping[str, float] = field(default_factory=dict)
+    buy_intents: tuple[MarketIntent, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

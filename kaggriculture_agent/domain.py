@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -17,12 +19,17 @@ class CropSpec:
     unfertilized_yield: int
 
 
+_ECONOMY_DATA = Path(__file__).resolve().parents[1] / "data" / "economy"
+
+
+def _load_json(name: str):
+    with (_ECONOMY_DATA / name).open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+_CROP_RULES = _load_json("crop_rules.json")
 CROPS: dict[str, CropSpec] = {
-    "WHEAT": CropSpec(10, 25, 2, 4, 0, 6, False, 4),
-    "CARROT": CropSpec(20, 35, 2, 3, 0, 4, False, 3),
-    "TOMATO": CropSpec(50, 60, 8, 8, 1, 4, True, 4),
-    "STRAWBERRY": CropSpec(100, 120, 10, 10, 2, 4, True, 4),
-    "MELON": CropSpec(80, 250, 10, 12, 0, 6, False, 6),
+    name: CropSpec(**values) for name, values in _CROP_RULES.items()
 }
 
 
@@ -42,27 +49,9 @@ ANIMALS: dict[str, AnimalSpec] = {
     "SHEEP": AnimalSpec(500, "PASTURE", 6, 3, 6, "WOOL"),
 }
 
-BASE_PRICES = {
-    "WHEAT": 25,
-    "CARROT": 35,
-    "TOMATO": 60,
-    "STRAWBERRY": 120,
-    "MELON": 250,
-    "EGG": 50,
-    "MILK": 160,
-    "WOOL": 200,
-    "FERTILIZER": 100,
-}
-
+BASE_PRICES: dict[str, int] = _load_json("market_prices.json")
 SHOP_DEMAND: dict[str, tuple[str, ...]] = {
-    "BAKERY": ("EGG", "WHEAT"),
-    "PIZZA_SHOP": ("MILK", "TOMATO", "WHEAT"),
-    "BRUNCH_SPOT": ("EGG", "WHEAT", "STRAWBERRY"),
-    "YARN_STORE": ("WOOL", "WOOL"),
-    "ICE_CREAM_SHOP": ("STRAWBERRY", "MILK", "WHEAT"),
-    "PET_CAFE": ("CARROT", "CARROT"),
-    "SMOOTHIE_SHOP": ("STRAWBERRY", "MILK"),
-    "FARMERS_MARKET": ("WHEAT", "CARROT", "TOMATO", "STRAWBERRY"),
+    shop: tuple(items) for shop, items in _load_json("shop_demand.json").items()
 }
 
 LAND_ORDER = ("NE", "SW", "SE")
