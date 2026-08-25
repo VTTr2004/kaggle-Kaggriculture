@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from kaggle_environments.envs.kaggriculture.kaggriculture import (
     MARKET_PARAMS as OFFICIAL_MARKET_PARAMS,
 )
@@ -17,6 +19,7 @@ from kaggriculture_agent.economy.pricing import (
     price_breakdown,
 )
 from kaggriculture_agent.economy.selling import quote_sell_order
+from kaggriculture_agent.economy_v2 import build_economy_snapshot_v2
 from kaggriculture_agent.state import build_state
 from tests.helpers import observation
 
@@ -186,3 +189,60 @@ def test_economy_quotes_hiring_but_does_not_schedule_units() -> None:
     features = analyze_economy(build_state(observation(hour=0)))
     assert [intent.command for intent in features.investment_intents].count(("HIRE",)) == 4
     assert not hasattr(features, "unit_intents")
+
+
+def test_v2_snapshot_tracks_exact_time_and_shed_capacity() -> None:
+    config = SimpleNamespace(episodeSteps=720, turnsPerDay=24, shedCapacity=10)
+    state = build_state(observation(day=29, hour=23, shed={"WHEAT": 7}), config)
+
+    snapshot = build_economy_snapshot_v2(state)
+
+    assert snapshot.step == 719
+    assert snapshot.remaining_turns == 1
+    assert snapshot.remaining_days == 1
+    assert snapshot.shed_usage == 7
+    assert snapshot.shed_free_capacity == 3
+
+
+def test_v2_snapshot_separates_observable_own_supply_sources() -> None:
+    obs = observation(shed={"WHEAT": 2}, inventories=[{"WHEAT": 3, "CARROT": 1}])
+    obs["farms"][0]["tiles"][0][0] = {
+        "kind": "PLANT",
+        "crop": "WHEAT",
+        "yield_units": 4,
+    }
+
+    snapshot = build_economy_snapshot_v2(build_state(obs))
+
+    assert snapshot.own_shed_supply == {"WHEAT": 2}
+    assert snapshot.own_carried_supply == {"WHEAT": 3, "CARROT": 1}
+    assert snapshot.own_ready_supply == {"WHEAT": 4}
+    assert snapshot.own_crop_counts == {"WHEAT": 1}
+
+
+def test_v2_snapshot_reads_only_public_opponent_signals() -> None:
+    obs = observation()
+    obs["farms"][1].update(
+        {
+            "shed": {"MELON": 99},
+            "seeds": {"MELON": 99},
+            "inventories": [{"MELON": 99}],
+            "hands": [[1, 1]],
+            "unlocked_quadrants": ["NW", "NE"],
+        }
+    )
+    obs["farms"][1]["tiles"][0][0] = {
+        "kind": "PLANT",
+        "crop": "MELON",
+        "yield_units": 4,
+    }
+
+    snapshot = build_economy_snapshot_v2(build_state(obs))
+
+    assert snapshot.opponent_ready_supply == {"MELON": 4}
+    assert snapshot.opponent_crop_counts == {"MELON": 1}
+    assert snapshot.opponent_hands == 1
+    assert snapshot.opponent_unlocked_land_count == 2
+    assert not hasattr(snapshot, "opponent_shed")
+    assert not hasattr(snapshot, "opponent_seeds")
+    assert not hasattr(snapshot, "opponent_inventories")

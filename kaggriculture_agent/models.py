@@ -27,6 +27,7 @@ class GameState:
     day: int
     hour: int
     turns_per_day: int
+    episode_steps: int
     total_days: int
     board_size: int
     max_market_orders: int
@@ -50,6 +51,10 @@ class GameState:
     @property
     def remaining_days(self) -> int:
         return max(0, self.total_days - self.day)
+
+    @property
+    def remaining_turns(self) -> int:
+        return max(0, self.episode_steps - self.step)
 
     @property
     def tiles(self) -> Sequence[Sequence[Any]]:

@@ -180,6 +180,68 @@ amplitude = target * base / shape(throughput)
 sign      = +1 khi khan hiếm, -1 khi dư cung
 ```
 
+### Cách đọc độ nhạy giá
+
+Ba tham số phải được đọc cùng nhau:
+
+```text
+shape  = giá đi nhanh/chậm theo distance như thế nào
+target = tại đúng distance = T, giá lệch bao nhiêu phần trăm so với base
+T      = cần thiếu/dư bao nhiêu đơn vị để đạt target
+```
+
+`T` càng nhỏ thì chỉ cần ít hàng vào/ra market là giá đã biến động mạnh. Các
+shape có ý nghĩa trực quan:
+
+| Shape | Khi lệch ít | Khi lệch rất xa | Cách hiểu |
+|---|---|---|---|
+| `linear` | Vừa phải | Tăng đều | Độ nhạy không đổi |
+| `sqrt` | Phản ứng nhanh | Chậm dần | Nhạy sớm, sau đó bão hòa dần |
+| `log`/`log10` | Phản ứng sớm | Rất chậm dần | Nhạy gần cân bằng, ít tăng tốc về sau |
+| `sq` | Phản ứng chậm | Cực nhanh | Ít lệch chưa sao, lệch lớn dễ crash/bùng nổ |
+| `hinge` | Gần linear trước `T` | Cực nhanh sau `T` | Có điểm gãy; vượt `T` tạo scarcity spike |
+
+Với `hinge` chính thức:
+
+```text
+normalized = distance / T
+shape       = normalized + 8 * max(0, normalized - 1)^2
+```
+
+Do đó `0.5T` cho khoảng `0.5 × target`, `T` cho đúng `target`, nhưng `2T`
+cho `10 × target`. Đây là lý do Carrot/Tomato/Egg có thể tăng giá rất mạnh khi
+khan hiếm vượt xa `T`.
+
+### Đặc tính từng market item
+
+Bảng dưới dùng default params của interpreter hiện tại. `giá thiếu T` là giá
+tại `I0-T`; `giá dư T` là giá tại `I0+T`. Configuration override, nếu có, phải
+được ưu tiên thay cho các default này.
+
+| Item | Thiếu hàng | Dư hàng | Base / `T` | Giá tại `I0-T / I0 / I0+T` | Cách hiểu nhanh |
+|---|---|---|---:|---:|---|
+| Wheat | `sqrt`, +80% | `log`, -20% | $25 / 400 | $45 / $25 / $20 | Thiếu: giá bán tăng khá nhanh, nhận nhiều tiền hơn; dư: giá chỉ giảm nhẹ, ít mất giá |
+| Carrot | `hinge`, +100% | `sqrt`, -70% | $35 / 450 | $70 / $35 / $10 | Thiếu vừa: tiền tăng từ từ; thiếu quá `T`: tiền tăng vọt; dư: giá tụt nhanh, dễ bán lỗ |
+| Tomato | `hinge`, +40% | `sqrt`, -60% | $60 / 200 | $84 / $60 / $24 | Thiếu vừa: tiền tăng ít; thiếu quá `T`: tăng mạnh; dư: giá tụt nhanh và tiền bán giảm nhiều |
+| Strawberry | `sqrt`, +70% | `linear`, -160% | $120 / 100 | $204 / $120 / $1 | Thiếu: giá tăng nhanh, dễ thu thêm tiền; dư: giá tụt rất nhanh về $1, nguy cơ lỗ lớn |
+| Melon | `log`, +20% | `sq`, -360% | $250 / 300 | $300 / $250 / $1 | Thiếu: giá chỉ tăng ít; dư ít: giá giảm chậm; dư nhiều: giá sập ngày càng nhanh về $1 |
+| Egg | `hinge`, +40% | `log`, -20% | $50 / 332 | $70 / $50 / $40 | Thiếu vừa: tiền tăng ít; thiếu quá `T`: giá tăng vọt; dư: giá giảm nhẹ, tương đối an toàn |
+| Milk | `sqrt`, +60% | `linear`, -160% | $160 / 122 | $256 / $160 / $1 | Thiếu: giá tăng nhanh; dư: giá tụt rất nhanh về $1, tiền bán có thể mất gần hết |
+| Wool | `log`, +20% | `sq`, -320% | $200 / 105 | $240 / $200 / $1 | Thiếu: giá chỉ tăng ít; dư: chỉ cần dư không nhiều cũng có thể sập giá rất nhanh |
+| Fertilizer | `linear`, +40% | `linear`, -40% | $100 / 200 | $140 / $100 / $60 | Thiếu bao nhiêu thì giá tăng đều; dư bao nhiêu thì giá giảm đều, dễ ước tính |
+
+Nhóm đọc nhanh:
+
+- Tương đối chịu dư cung: Wheat, Egg; Fertilizer có curve cân bằng nhưng không
+  có Town demand tự động.
+- Có scarcity jackpot sau `T`: Carrot, Tomato, Egg.
+- Upside tốt nhưng glut risk cao: Strawberry, Milk.
+- Upside nhỏ và glut risk cực cao: Melon, Wool.
+
+Các mô tả `tăng nhanh`, `giảm nhanh` chỉ nói về **giá market**, không trực tiếp
+là lời/lỗ. Profit còn phải trừ seed/animal/feed/fertilizer cost, tính yield,
+Town demand, own/opponent supply, labor feasibility và terminal unsold risk.
+
 ### Việc cần làm
 
 - Giữ parity với `linear`, `sq`, `sqrt`, `log`, `log10` và `hinge`.
@@ -229,6 +291,9 @@ Tính lượng sản phẩm bị Town lấy khỏi market trong một horizon th
 - Demand của từng shop instance; shop trùng tên phải tính nhiều lần.
 - Single-product shop mua hai đơn vị mỗi tick.
 - Lịch unlock shop mới và số tick shop đó có thể hoạt động sau khi mở.
+- Phân phối xác suất loại shop ở lần unlock tiếp theo. Theo interpreter hiện
+  tại, shop được rút đều với replacement nên mỗi loại có xác suất `1/8`; shop
+  đã mở và shop duplicate không làm thay đổi phân phối lần sau.
 - Expected demand của shop ngẫu nhiên tương lai.
 - Scenario thấp/trung bình/cao cho future-shop demand.
 
@@ -237,6 +302,8 @@ Tính lượng sản phẩm bị Town lấy khỏi market trong một horizon th
 ```text
 known_center_consumption
 known_shop_consumption
+next_shop_probabilities
+future_shop_unlocks
 expected_future_shop_consumption
 total_expected_consumption
 consumption_events_by_step
@@ -247,6 +314,8 @@ consumption_events_by_step
 - Đúng ở horizon bắt đầu giữa ngày.
 - Đúng khi unlock xảy ra tại day boundary.
 - Đúng với shop duplicate và cap tám instance.
+- Xác suất shop tiếp theo có tổng bằng 1 trước cap và rỗng sau khi đủ tám
+  instance.
 - Town Center không tiêu thụ Fertilizer.
 
 ## 7. Cụm 4 — Own Supply Forecast

@@ -35,6 +35,7 @@ def build_state(observation: Any, configuration: Any = None) -> GameState:
         day=int(_get(observation, "day", 0) or 0),
         hour=int(_get(observation, "hour", 0) or 0),
         turns_per_day=turns_per_day,
+        episode_steps=episode_steps,
         total_days=int(math.ceil(episode_steps / turns_per_day)),
         board_size=board_size,
         max_market_orders=max(1, int(_get(configuration, "maxMarketOrdersPerTurn", 10) or 10)),
