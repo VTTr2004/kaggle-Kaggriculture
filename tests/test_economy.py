@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+import pytest
 from kaggle_environments.envs.kaggriculture.kaggriculture import (
     MARKET_PARAMS as OFFICIAL_MARKET_PARAMS,
 )
@@ -20,6 +21,17 @@ from kaggriculture_agent.economy.pricing import (
 )
 from kaggriculture_agent.economy.selling import quote_sell_order
 from kaggriculture_agent.economy_v2 import build_economy_snapshot_v2
+from kaggriculture_agent.economy_v2.pricing import (
+    LockstepMarketQuoteV2,
+    MarketOrderV2,
+    OrderQuoteV2,
+    market_price_v2,
+    price_breakdown_v2,
+    quote_buy_product_v2,
+    quote_lockstep_market_v2,
+    quote_sell_v2,
+    shape_value_v2,
+)
 from kaggriculture_agent.state import build_state
 from tests.helpers import observation
 
@@ -246,3 +258,196 @@ def test_v2_snapshot_reads_only_public_opponent_signals() -> None:
     assert not hasattr(snapshot, "opponent_shed")
     assert not hasattr(snapshot, "opponent_seeds")
     assert not hasattr(snapshot, "opponent_inventories")
+
+
+def test_v2_price_curve_matches_official_interpreter_boundaries() -> None:
+    for item, params in OFFICIAL_MARKET_PARAMS.items():
+        equilibrium = int(params["I0"])
+        throughput = int(params["T"])
+        for inventory in (
+            equilibrium - throughput,
+            equilibrium,
+            equilibrium + throughput,
+            equilibrium + 2 * throughput,
+        ):
+            assert market_price_v2(item, inventory) == official_market_price(item, inventory)
+
+
+def test_v2_price_breakdown_explains_selected_side_and_shape() -> None:
+    scarcity = price_breakdown_v2("CARROT", 9550)
+    glut = price_breakdown_v2("CARROT", 10450)
+
+    assert scarcity.side == "scarcity"
+    assert scarcity.function == "hinge"
+    assert scarcity.quoted_price == 70
+    assert glut.side == "glut"
+    assert glut.function == "sqrt"
+    assert glut.quoted_price == 10
+
+
+def test_v2_hinge_changes_from_linear_to_accelerating_after_throughput() -> None:
+    assert shape_value_v2("hinge", 225, 450) == 0.5
+    assert shape_value_v2("hinge", 450, 450) == 1.0
+    assert shape_value_v2("hinge", 900, 450) == 10.0
+
+
+def test_v2_pricing_uses_market_parameter_overrides_without_mutating_them() -> None:
+    overrides = {
+        "WHEAT": {
+            "base": 30,
+            "I0": 10000,
+            "T": 500,
+            "below_func": "linear",
+            "below_target": 0.5,
+            "above_func": "linear",
+            "above_target": 0.5,
+        }
+    }
+
+    assert market_price_v2("WHEAT", 9500, overrides) == 45
+    assert overrides["WHEAT"]["base"] == 30
+
+
+def test_v2_sell_quote_prices_each_unit_sequentially() -> None:
+    quote = quote_sell_v2("WHEAT", 3, 9600)
+
+    assert isinstance(quote, OrderQuoteV2)
+    assert quote.operation == "SELL"
+    assert quote.unit_prices == (
+        market_price_v2("WHEAT", 9600),
+        market_price_v2("WHEAT", 9601),
+        market_price_v2("WHEAT", 9602),
+    )
+    assert quote.total == sum(quote.unit_prices)
+    assert quote.average_price == quote.total / 3
+    assert quote.ending_inventory == 9603
+
+
+def test_v2_sell_quote_does_not_add_supply_at_price_floor() -> None:
+    quote = quote_sell_v2("MELON", 3, 10300)
+
+    assert quote.unit_prices == (1, 1, 1)
+    assert quote.total == 3
+    assert quote.average_price == 1
+    assert quote.ending_inventory == 10300
+
+
+def test_v2_zero_quantity_sell_quote_is_empty() -> None:
+    quote = quote_sell_v2("WHEAT", 0, 10000)
+
+    assert quote.quantity == 0
+    assert quote.unit_prices == ()
+    assert quote.total == 0
+    assert quote.average_price == 0
+    assert quote.ending_inventory == 10000
+
+
+def test_v2_sell_quote_rejects_negative_quantity() -> None:
+    with pytest.raises(ValueError, match="quantity"):
+        quote_sell_v2("WHEAT", -1, 10000)
+
+
+def test_v2_buy_product_quote_prices_at_post_buy_inventory() -> None:
+    quote = quote_buy_product_v2("WHEAT", 3, 10000)
+
+    assert isinstance(quote, OrderQuoteV2)
+    assert quote.operation == "BUY_PRODUCT"
+    assert quote.unit_prices == (
+        market_price_v2("WHEAT", 9999),
+        market_price_v2("WHEAT", 9998),
+        market_price_v2("WHEAT", 9997),
+    )
+    assert quote.unit_prices == (26, 26, 27)
+    assert quote.total == 79
+    assert quote.average_price == 79 / 3
+    assert quote.ending_inventory == 9997
+
+
+def test_v2_buy_then_sell_round_trip_nets_zero_against_unchanged_market() -> None:
+    buy = quote_buy_product_v2("WHEAT", 1, 10000)
+    sell = quote_sell_v2("WHEAT", 1, buy.ending_inventory)
+
+    assert buy.total == sell.total
+    assert sell.ending_inventory == 10000
+
+
+def test_v2_zero_quantity_buy_product_quote_is_empty() -> None:
+    quote = quote_buy_product_v2("FERTILIZER", 0, 10000)
+
+    assert quote.quantity == 0
+    assert quote.unit_prices == ()
+    assert quote.total == 0
+    assert quote.average_price == 0
+    assert quote.ending_inventory == 10000
+
+
+def test_v2_buy_product_quote_rejects_invalid_product_or_quantity() -> None:
+    with pytest.raises(ValueError, match="WHEAT or FERTILIZER"):
+        quote_buy_product_v2("CARROT", 1, 10000)
+    with pytest.raises(ValueError, match="quantity"):
+        quote_buy_product_v2("WHEAT", -1, 10000)
+
+
+def test_v2_lockstep_quotes_both_players_from_same_precommit_inventory() -> None:
+    result = quote_lockstep_market_v2(
+        {"STRAWBERRY": 10000},
+        (
+            (MarketOrderV2("SELL", "STRAWBERRY", 1),),
+            (MarketOrderV2("SELL", "STRAWBERRY", 1),),
+        ),
+    )
+
+    assert isinstance(result, LockstepMarketQuoteV2)
+    assert result.player_order_quotes[0][0].unit_prices == (120,)
+    assert result.player_order_quotes[1][0].unit_prices == (120,)
+    assert market_price_v2("STRAWBERRY", 10001) == 118
+    assert result.ending_inventory["STRAWBERRY"] == 10002
+
+
+def test_v2_lockstep_processes_order_queues_by_shared_order_index() -> None:
+    result = quote_lockstep_market_v2(
+        {"STRAWBERRY": 10000},
+        (
+            (
+                MarketOrderV2("SELL", "STRAWBERRY", 1),
+                MarketOrderV2("SELL", "STRAWBERRY", 1),
+            ),
+            (MarketOrderV2("SELL", "STRAWBERRY", 1),),
+        ),
+    )
+
+    assert [quote.unit_prices for quote in result.player_order_quotes[0]] == [(120,), (116,)]
+    assert [quote.unit_prices for quote in result.player_order_quotes[1]] == [(120,)]
+    assert result.ending_inventory["STRAWBERRY"] == 10003
+
+
+def test_v2_lockstep_can_quote_a_buy_and_sell_in_the_same_round() -> None:
+    starting_inventory = {"WHEAT": 10000}
+    result = quote_lockstep_market_v2(
+        starting_inventory,
+        (
+            (MarketOrderV2("SELL", "WHEAT", 1),),
+            (MarketOrderV2("BUY_PRODUCT", "WHEAT", 1),),
+        ),
+    )
+
+    assert result.player_order_quotes[0][0].unit_prices == (25,)
+    assert result.player_order_quotes[1][0].unit_prices == (26,)
+    assert result.ending_inventory["WHEAT"] == 10000
+    assert starting_inventory == {"WHEAT": 10000}
+
+
+def test_v2_lockstep_rejects_invalid_queue_shape_or_order() -> None:
+    with pytest.raises(ValueError, match="exactly two"):
+        quote_lockstep_market_v2(
+            {"WHEAT": 10000},
+            ((MarketOrderV2("SELL", "WHEAT", 1),),),
+        )
+    with pytest.raises(ValueError, match="WHEAT or FERTILIZER"):
+        quote_lockstep_market_v2(
+            {"CARROT": 10000},
+            (
+                (MarketOrderV2("BUY_PRODUCT", "CARROT", 1),),
+                (),
+            ),
+        )
