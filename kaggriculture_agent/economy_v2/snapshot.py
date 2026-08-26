@@ -91,9 +91,13 @@ class EconomySnapshotV2:
     step: int
     day: int
     hour: int
+    turns_per_day: int
     episode_steps: int
     remaining_turns: int
     remaining_days: int
+    town_shop_unlock_interval: int
+    town_shop_sell_interval: int
+    town_center_sell_interval: int
     money: float
     opponent_money: float
     prices: Mapping[str, float]
@@ -138,9 +142,13 @@ def build_economy_snapshot_v2(state: GameState) -> EconomySnapshotV2:
         step=state.step,
         day=state.day,
         hour=state.hour,
+        turns_per_day=state.turns_per_day,
         episode_steps=state.episode_steps,
         remaining_turns=state.remaining_turns,
         remaining_days=state.remaining_days,
+        town_shop_unlock_interval=state.town_shop_unlock_interval,
+        town_shop_sell_interval=state.town_shop_sell_interval,
+        town_center_sell_interval=state.town_center_sell_interval,
         money=state.money,
         opponent_money=float(state.opponent.get("money", 0.0) or 0.0),
         prices=_float_mapping(state.market.get("prices", {}) or {}),

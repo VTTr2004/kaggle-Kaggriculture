@@ -21,6 +21,11 @@ from kaggriculture_agent.economy.pricing import (
 )
 from kaggriculture_agent.economy.selling import quote_sell_order
 from kaggriculture_agent.economy_v2 import build_economy_snapshot_v2
+from kaggriculture_agent.economy_v2.demand import (
+    TownDemandForecastV2,
+    forecast_town_demand_v2,
+    next_shop_probabilities_v2,
+)
 from kaggriculture_agent.economy_v2.pricing import (
     LockstepMarketQuoteV2,
     MarketOrderV2,
@@ -204,7 +209,14 @@ def test_economy_quotes_hiring_but_does_not_schedule_units() -> None:
 
 
 def test_v2_snapshot_tracks_exact_time_and_shed_capacity() -> None:
-    config = SimpleNamespace(episodeSteps=720, turnsPerDay=24, shedCapacity=10)
+    config = SimpleNamespace(
+        episodeSteps=720,
+        turnsPerDay=24,
+        shedCapacity=10,
+        townShopUnlockInterval=3,
+        townShopSellInterval=4,
+        townCenterSellInterval=24,
+    )
     state = build_state(observation(day=29, hour=23, shed={"WHEAT": 7}), config)
 
     snapshot = build_economy_snapshot_v2(state)
@@ -212,6 +224,10 @@ def test_v2_snapshot_tracks_exact_time_and_shed_capacity() -> None:
     assert snapshot.step == 719
     assert snapshot.remaining_turns == 1
     assert snapshot.remaining_days == 1
+    assert snapshot.turns_per_day == 24
+    assert snapshot.town_shop_unlock_interval == 3
+    assert snapshot.town_shop_sell_interval == 4
+    assert snapshot.town_center_sell_interval == 24
     assert snapshot.shed_usage == 7
     assert snapshot.shed_free_capacity == 3
 
@@ -451,3 +467,79 @@ def test_v2_lockstep_rejects_invalid_queue_shape_or_order() -> None:
                 (),
             ),
         )
+
+
+def test_v2_next_shop_probabilities_are_uniform_until_instance_cap() -> None:
+    probabilities = next_shop_probabilities_v2(("PET_CAFE", "PET_CAFE", "BAKERY"))
+
+    assert len(probabilities) == 8
+    assert sum(probabilities.values()) == 1
+    assert all(probability == 0.125 for probability in probabilities.values())
+    assert next_shop_probabilities_v2(("PET_CAFE",) * 8) == {}
+
+
+def test_v2_town_demand_counts_duplicate_known_shops_and_center_ticks() -> None:
+    obs = observation()
+    obs["town"]["unlocked_shops"] = ["PET_CAFE", "PET_CAFE"]
+    snapshot = build_economy_snapshot_v2(build_state(obs))
+
+    forecast = forecast_town_demand_v2(snapshot, "CARROT", end_step=72)
+
+    assert isinstance(forecast, TownDemandForecastV2)
+    assert forecast.known_center_consumption == 3
+    assert forecast.known_shop_consumption == 72
+    assert forecast.expected_future_shop_consumption == 0
+    assert forecast.total_expected_consumption == 75
+    assert sum(event.quantity_expected for event in forecast.consumption_events) == 75
+
+
+def test_v2_town_demand_forecasts_unlock_timing_and_random_shop_scenarios() -> None:
+    snapshot = build_economy_snapshot_v2(build_state(observation()))
+
+    forecast = forecast_town_demand_v2(snapshot, "WHEAT", end_step=144)
+
+    assert forecast.future_shop_unlock_steps == (72,)
+    assert forecast.known_center_consumption == 6
+    assert forecast.known_shop_consumption == 0
+    assert forecast.future_shop_consumption_low == 0
+    assert forecast.expected_future_shop_consumption == pytest.approx(11.25)
+    assert forecast.future_shop_consumption_high == 18
+    assert forecast.total_expected_consumption == pytest.approx(17.25)
+    assert (
+        forecast.total_consumption_low
+        <= forecast.total_expected_consumption
+        <= forecast.total_consumption_high
+    )
+
+
+def test_v2_future_shop_only_consumes_after_end_of_day_unlock() -> None:
+    snapshot = build_economy_snapshot_v2(build_state(observation(day=2, hour=23)))
+
+    forecast = forecast_town_demand_v2(snapshot, "WHEAT", end_step=73)
+
+    assert snapshot.step == 71
+    assert forecast.future_shop_unlock_steps == (72,)
+    assert forecast.known_center_consumption == 1
+    assert forecast.expected_future_shop_consumption == pytest.approx(0.625)
+    assert forecast.total_expected_consumption == pytest.approx(1.625)
+
+
+def test_v2_town_center_never_consumes_fertilizer() -> None:
+    snapshot = build_economy_snapshot_v2(build_state(observation()))
+
+    forecast = forecast_town_demand_v2(snapshot, "FERTILIZER", end_step=72)
+
+    assert forecast.known_center_consumption == 0
+    assert forecast.total_expected_consumption == 0
+
+
+def test_v2_town_demand_respects_eight_shop_instance_cap() -> None:
+    obs = observation()
+    obs["town"]["unlocked_shops"] = ["BAKERY"] * 8
+    snapshot = build_economy_snapshot_v2(build_state(obs))
+
+    forecast = forecast_town_demand_v2(snapshot, "WHEAT", end_step=216)
+
+    assert forecast.next_shop_probabilities == {}
+    assert forecast.future_shop_unlock_steps == ()
+    assert forecast.expected_future_shop_consumption == 0
